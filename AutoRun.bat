@@ -1,0 +1,1 @@
+python -B Py-Password-Generator.py -char=16 -lc -uc -punc -unique -clip
