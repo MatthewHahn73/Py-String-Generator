@@ -20,11 +20,11 @@ Functionality
     -Generates N character passwords
     -Parameters
         -char       <Required> password character length
+        -num        <Required> number of strings to generate
         -lc         <Optional> include lowercase alphabet characters (Default is digits only)
         -uc         <Optional> include uppercase alphabet characters (Default is digits only)
         -punc       <Optional> include puncuation characters (Default is digits only)
         -unique     <Optional> each character of the string will be unique (No duplicates)
-        -clip       <Optional> outputs the generated password to the clipboard
         -txt        <Optional> outputs the generated password to a .txt file
         -etxt       <Optional> outputs the generated password to an encrypted .txt file     
 """
@@ -51,29 +51,31 @@ class Generator():
     def __init__(self, args):
         self.Parameters = argparse.Namespace(**{ 
 			"CHARACTERS": args.char,
+			"NUMBERS": args.num,
 			"LOWERCASE_CHARACTERS": args.lc,
 			"UPPERCASE_CHARACTERS": args.uc,
 			"PUNCTUATION": args.punc,
 			"UNIQUENESS": args.unique,
-            "CLIPBOARD": args.clip,
 			"FILE_OUTPUT": args.txt,
 			"ENCRYPTED_FILE_OUTPUT": args.etxt,
 		})
 
-    def Output_To_File(self, Password, Path):
+    def Output_To_File(self, String_List, Path):
         try:
             with open(Path, "w") as File:
-                File.write(Password + "\n")
+                To_Write_String = "\n".join(String_List)
+                File.write(To_Write_String)
             return True
         except IOError as E:
             logging.error(ERROR_TEMPLATE.format(type(E).__name__, E.args)) 
         return False
 
-    def Output_To_File_Encrypted(self, Password, Key, Path):
+    def Output_To_File_Encrypted(self, String_List, Key, Path):
         try:
             with open(Path, "wb") as File:
+                To_Encrypt_String = "\n".join(String_List)
                 Cipher_Object = AES.new(bytes(Key, "utf-8"), AES.MODE_EAX)
-                Cipher_Text, Tag = Cipher_Object.encrypt_and_digest(Password.encode('utf-8'))
+                Cipher_Text, Tag = Cipher_Object.encrypt_and_digest(To_Encrypt_String.encode('utf-8'))
                 [ File.write(x) for x in (Cipher_Object.nonce, Tag, Cipher_Text) ]
                 return True
         except IOError:
@@ -114,52 +116,50 @@ class Generator():
     def Execute(self):
         try:
             print("=" * 32
-                , "Character(s): " + str(self.Parameters.CHARACTERS) 
-                , "Character Uniqueness: " + str(self.Parameters.UNIQUENESS)
-                , "Include Lowercase: " + str(self.Parameters.LOWERCASE_CHARACTERS)
-                , "Include Uppercase: " + str(self.Parameters.UPPERCASE_CHARACTERS)
-                , "Include Puncuation: " + str(self.Parameters.PUNCTUATION)
-                , "Output to Clipboard: " + str(self.Parameters.CLIPBOARD)
+                , "Character Count: " + str(self.Parameters.CHARACTERS)
+                , "Character Possibilities: [" + " ".join([*self.DIGITS \
+                                                    + (self.NUMBERS_LOWER if self.Parameters.LOWERCASE_CHARACTERS else "") \
+                                                    + (self.NUMBERS_UPPER if self.Parameters.UPPERCASE_CHARACTERS else "") \
+                                                    + (self.PUNCTUATION if self.Parameters.PUNCTUATION else "")]) + "]"
+                , "String(s) to Generate: " + str(self.Parameters.NUMBERS) 
                 , "Output to File: " + str(self.Parameters.FILE_OUTPUT if not self.Parameters.ENCRYPTED_FILE_OUTPUT else self.Parameters.ENCRYPTED_FILE_OUTPUT)
-                , "Encrypt: " + str(self.Parameters.ENCRYPTED_FILE_OUTPUT)
+                , "Output to Encrypted File: " + str(self.Parameters.ENCRYPTED_FILE_OUTPUT)
                 , "=" * 32
                 , sep="\n")
             Run = ""
             while len(Run) <= 0:
-                Run = input("Generate a password with these parameters? (Y/N) ")
+                Run = input("Generate string(s) with these parameters? (Y/N) ")
             if (Run[0].lower() == "y"):
                 if self.Parameters.CHARACTERS > 0:
-                    Password = self.Generate_String()
-                    if Password:
+                    Generated_Strings = [self.Generate_String() for i in range(0, self.Parameters.NUMBERS)]
+                    if Generated_Strings:
                         if self.Parameters.FILE_OUTPUT:                     #Output to text file
-                            Output_File = "Output.txt"
-                            if self.Output_To_File(Password, Output_File): 
-                                print("Password was written to '" + str(Output_File) + "'")
+                            Output_File = "String_Output.txt"
+                            if self.Output_To_File(Generated_Strings, Output_File): 
+                                print("String(s) were written to '" + str(Output_File) + "'")
                         if self.Parameters.ENCRYPTED_FILE_OUTPUT:           #Prompt for AES key; Output encrypted text to file
-                            Output_File = "Encrypted_Output.txt"
-                            AES_Key = getpass("Key: ")
+                            Output_File = "Encrypted_String_Output.txt"
+                            AES_Key = getpass("AES Key: ")
                             while len(AES_Key) != 16:
                                 print("AES keys must be 16 characters")
                                 AES_Key = getpass("Key: ")
-                            if self.Output_To_File_Encrypted(Password, AES_Key, Output_File):
-                                print("Password was written to '" + str(Output_File) + "'")
-                        if self.Parameters.CLIPBOARD:                       #Copy the file to the windows clipboard
-                            pyperclip.copy(Password)
-                            print("Password was copied to the clipboard")
+                            if self.Output_To_File_Encrypted(Generated_Strings, AES_Key, Output_File):
+                                print("String(s) were written to '" + str(Output_File) + "'")
                         if not self.Parameters.FILE_OUTPUT \
-                            and not self.Parameters.ENCRYPTED_FILE_OUTPUT \
-                                and not self.Parameters.CLIPBOARD:          #Output generated string to console
-                                    print("Password: " + str(Password))
+                            and not self.Parameters.ENCRYPTED_FILE_OUTPUT:  #Output generated string to console
+                                print("Strings: ")
+                                print(str("\n".join(Generated_Strings)), sep="\n")
                 else:
                     raise Exception("Character count cannot be negative or 0")
         except Exception as E:
             logging.error(ERROR_TEMPLATE.format(type(E).__name__, E.args)) 
 
 if __name__ == "__main__": 	#Reads in arguments
-	par = argparse.ArgumentParser(description="Password Generator v0.7")
+	par = argparse.ArgumentParser(description="Password Generator v1.0")
 
 	#Required parameters
 	par.add_argument("-char", type=int, help="<Required> password character length", required=True)
+	par.add_argument("-num", type=int, help="<Required> number of strings to generate", required=True)
 
 	#Optional parameters
 	par.add_argument("-lc", help="<Optional> include lowercase alphabet characters (Default is digits only)", action="store_true")
@@ -168,7 +168,6 @@ if __name__ == "__main__": 	#Reads in arguments
 	par.add_argument("-unique", help="<Optional> each character of the string will be unique (No duplicates)", action="store_true")
 
 	#Export parameters
-	par.add_argument("-clip", help="<Optional> outputs the generated password to the clipboard", action="store_true")
 	par.add_argument("-txt", help="<Optional> outputs the generated password to a .txt file", action="store_true")
 	par.add_argument("-etxt", help="<Optional> outputs the generated password to an encrypted .txt file", action="store_true")
 
