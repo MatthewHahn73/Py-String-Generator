@@ -2,16 +2,16 @@
 Password Generator
 
 Future Features
-    TODO
+    -Include a parameter to filter out certain characters from the string list
+
+Bugs
+    -Hangs up generating strings with a character size over 40 with the unique tag
 
 Required Software
     -Python 
         -Version >= 3.6
         -Installation: https://www.python.org/downloads/
     -Python Modules
-        -pyperclip
-            -Purpose: Clipboard Interactivity
-            -Installation: https://pypi.org/project/pyperclip/
         -Cryptodomex 
             -Purpose: 256-Bit AES
             -Installation: https://pypi.org/project/pycryptodomex/
@@ -21,10 +21,11 @@ Functionality
     -Parameters
         -char       <Required> password character length
         -num        <Required> number of strings to generate
-        -lc         <Optional> include lowercase alphabet characters (Default is digits only)
-        -uc         <Optional> include uppercase alphabet characters (Default is digits only)
-        -punc       <Optional> include puncuation characters (Default is digits only)
+        -lc         <Optional> include at least one lowercase alphabet character (Default is digits only)
+        -uc         <Optional> include at least one uppercase alphabet character (Default is digits only)
+        -punc       <Optional> include at least one puncuation character (Default is digits only)
         -unique     <Optional> each character of the string will be unique (No duplicates)
+        -conf       <Optional> include a confirmation prompt
         -txt        <Optional> outputs the generated password to a .txt file
         -etxt       <Optional> outputs the generated password to an encrypted .txt file     
 """
@@ -34,7 +35,7 @@ import argparse
 import logging
 import random
 import pathlib
-import pyperclip
+from math import ceil
 from Cryptodome.Cipher import AES
 from getpass import getpass
 
@@ -46,12 +47,17 @@ class Generator():
     NUMBERS_LOWER = string.ascii_lowercase
     NUMBERS_UPPER = string.ascii_uppercase
     DIGITS = string.digits
-    PUNCTUATION = string.punctuation
+    PUNCTUATION = "".join(  #Filter out quotations
+        [item for item \
+         in string.punctuation \
+            if item != "'" and item != '"']
+    )     
 
     def __init__(self, args):
         self.Parameters = argparse.Namespace(**{ 
 			"CHARACTERS": args.char,
 			"NUMBERS": args.num,
+            "CONFIRMATION": args.conf,
 			"LOWERCASE_CHARACTERS": args.lc,
 			"UPPERCASE_CHARACTERS": args.uc,
 			"PUNCTUATION": args.punc,
@@ -91,27 +97,39 @@ class Generator():
 
     def Generate_String(self):
         try:
-            Generated_String = ""
-            Candidates = [*self.DIGITS \
+            GeneratedString = ""
+            CandidatesConcat = [*self.DIGITS \
                 + (self.NUMBERS_LOWER if self.Parameters.LOWERCASE_CHARACTERS else "") \
                 + (self.NUMBERS_UPPER if self.Parameters.UPPERCASE_CHARACTERS else "") \
                 + (self.PUNCTUATION if self.Parameters.PUNCTUATION else "")]
-            for i in range(0, self.Parameters.CHARACTERS):
-                if self.Parameters.UNIQUENESS:
-                    if self.Parameters.CHARACTERS < len(Candidates):
-                        Generated_Character = random.choice(Candidates)
-                        while Generated_Character in Generated_String:
-                            Generated_Character = random.choice(Candidates)
-                        Generated_String += Generated_Character
+            CanidateSep = list(filter(("").__ne__, ["".join(self.DIGITS) \
+                , (self.NUMBERS_LOWER if self.Parameters.LOWERCASE_CHARACTERS else "") \
+                , (self.NUMBERS_UPPER if self.Parameters.UPPERCASE_CHARACTERS else "") \
+                , (self.PUNCTUATION if self.Parameters.PUNCTUATION else "")
+            ]))
+            CanidateSplit = ceil(self.Parameters.CHARACTERS / len(CanidateSep)) #Ceiling round to get a useable iterable count
+            for i in range(0, CanidateSplit):                                   #For each split section
+                GeneratedStringSeg = ""
+                CanidateSplitIndexesRandom = random.sample(range(len(CanidateSep)), len(CanidateSep))   #Randomizes the indexes for increased complexity
+                for j in range(0, len(CanidateSep)):                            #Choose one value from each available list
+                    if self.Parameters.UNIQUENESS:                              #If characters need to be unique
+                        if self.Parameters.CHARACTERS < len(CandidatesConcat):  #If character amount is within canidate limitations
+                            GeneratedStringSingle = random.choice(CanidateSep[CanidateSplitIndexesRandom[j]])
+                            while GeneratedStringSingle in GeneratedString:
+                                GeneratedStringSingle = random.choice(CanidateSep[CanidateSplitIndexesRandom[j]])
+                            GeneratedStringSeg += GeneratedStringSingle
+                        else:
+                            raise Exception("Given character amount (" 
+                                + str(self.Parameters.CHARACTERS) + ") is greater than the possible candidates for the string (" 
+                                    + str(len(CandidatesConcat)) + ")")
                     else:
-                        raise Exception("Given character amount (" 
-                            + str(self.Parameters.CHARACTERS) + ") is greater than the possible candidates for the string (" 
-                                + str(len(Candidates)) + ")")
-                else:
-                    Generated_String += random.choice(Candidates)
-            return Generated_String
+                        GeneratedStringSeg += random.choice(CanidateSep[CanidateSplitIndexesRandom[j]])
+                GeneratedString += GeneratedStringSeg
         except Exception as E:
             logging.error(ERROR_TEMPLATE.format(type(E).__name__, E.args)) 
+            return None
+        GeneratedStringEffective = GeneratedString[:-(len(GeneratedString) - self.Parameters.CHARACTERS)]   #String trimmed to meet character count expectations
+        return GeneratedStringEffective if GeneratedStringEffective != "" else GeneratedString              #If string already meets character count expectations, return string
 
     def Execute(self):
         try:
@@ -127,12 +145,15 @@ class Generator():
                 , "=" * 32
                 , sep="\n")
             Run = ""
-            while len(Run) <= 0:
-                Run = input("Generate string(s) with these parameters? (Y/N) ")
+            if self.Parameters.CONFIRMATION:
+                while len(Run) <= 0:
+                    Run = input("Generate string(s) with these parameters? (Y/N) ")
+            else:
+                Run = "Yes"
             if (Run[0].lower() == "y"):
                 if self.Parameters.CHARACTERS > 0:
                     Generated_Strings = [self.Generate_String() for i in range(0, self.Parameters.NUMBERS)]
-                    if Generated_Strings:
+                    if None not in Generated_Strings:                       #No errors were found
                         if self.Parameters.FILE_OUTPUT:                     #Output to text file
                             Output_File = "String_Output.txt"
                             if self.Output_To_File(Generated_Strings, Output_File): 
@@ -146,7 +167,7 @@ class Generator():
                             if self.Output_To_File_Encrypted(Generated_Strings, AES_Key, Output_File):
                                 print("String(s) were written to '" + str(Output_File) + "'")
                         if not self.Parameters.FILE_OUTPUT \
-                            and not self.Parameters.ENCRYPTED_FILE_OUTPUT:  #Output generated string to console
+                            and not self.Parameters.ENCRYPTED_FILE_OUTPUT:  #Output generated string(s) to console
                                 print("Strings: ")
                                 print(str("\n".join(Generated_Strings)), sep="\n")
                 else:
@@ -162,10 +183,11 @@ if __name__ == "__main__": 	#Reads in arguments
 	par.add_argument("-num", type=int, help="<Required> number of strings to generate", required=True)
 
 	#Optional parameters
-	par.add_argument("-lc", help="<Optional> include lowercase alphabet characters (Default is digits only)", action="store_true")
-	par.add_argument("-uc", help="<Optional> include uppercase alphabet characters (Default is digits only)", action="store_true")
-	par.add_argument("-punc", help="<Optional> include puncuation characters (Default is digits only)", action="store_true")
+	par.add_argument("-lc", help="<Optional> include at least one lowercase alphabet character (Default is digits only)", action="store_true")
+	par.add_argument("-uc", help="<Optional> include at least one uppercase alphabet character (Default is digits only)", action="store_true")
+	par.add_argument("-punc", help="<Optional> include at least one puncuation character (Default is digits only)", action="store_true")
 	par.add_argument("-unique", help="<Optional> each character of the string will be unique (No duplicates)", action="store_true")
+	par.add_argument("-conf", help="<Optional> include a confirmation prompt", action="store_true")
 
 	#Export parameters
 	par.add_argument("-txt", help="<Optional> outputs the generated password to a .txt file", action="store_true")
