@@ -1,9 +1,6 @@
 """
 Password Generator
 
-Future Features
-    -Include a parameter to filter out certain characters from the string list
-
 Bugs
     -Hangs up generating strings with a character size over 40 with the unique tag
 
@@ -21,6 +18,7 @@ Functionality
     -Parameters
         -char       <Required> password character length
         -num        <Required> number of strings to generate
+        -filter     <Optional> these characters that will be excluded from the generated string
         -lc         <Optional> include at least one lowercase alphabet character (Default is digits only)
         -uc         <Optional> include at least one uppercase alphabet character (Default is digits only)
         -punc       <Optional> include at least one puncuation character (Default is digits only)
@@ -47,11 +45,7 @@ class Generator():
     NUMBERS_LOWER = string.ascii_lowercase
     NUMBERS_UPPER = string.ascii_uppercase
     DIGITS = string.digits
-    PUNCTUATION = "".join(  #Filter out quotations
-        [item for item \
-         in string.punctuation \
-            if item != "'" and item != '"']
-    )     
+    PUNCTUATION = None
 
     def __init__(self, args):
         self.Parameters = argparse.Namespace(**{ 
@@ -61,12 +55,22 @@ class Generator():
 			"LOWERCASE_CHARACTERS": args.lc,
 			"UPPERCASE_CHARACTERS": args.uc,
 			"PUNCTUATION": args.punc,
+            "PUNCTUATION_FILTER": args.filter,
 			"UNIQUENESS": args.unique,
 			"FILE_OUTPUT": args.txt,
 			"ENCRYPTED_FILE_OUTPUT": args.etxt,
 		})
+        self.PUNCTUATION = self.FilterPuntuation()
 
-    def Output_To_File(self, String_List, Path):
+    def FilterPuntuation(self):
+        PUNCTUATION_FILTER_LIST = self.Parameters.PUNCTUATION_FILTER.split(" ")
+        return "".join (  #Filter out quotations
+            [item for item \
+                in string.punctuation \
+                    if item not in PUNCTUATION_FILTER_LIST]
+        )
+
+    def OutputToFile(self, String_List, Path):
         try:
             with open(Path, "w") as File:
                 To_Write_String = "\n".join(String_List)
@@ -76,7 +80,7 @@ class Generator():
             logging.error(ERROR_TEMPLATE.format(type(E).__name__, E.args)) 
         return False
 
-    def Output_To_File_Encrypted(self, String_List, Key, Path):
+    def OutputToFileEncrypted(self, String_List, Key, Path):
         try:
             with open(Path, "wb") as File:
                 To_Encrypt_String = "\n".join(String_List)
@@ -95,7 +99,7 @@ class Generator():
             logging.error(ERROR_TEMPLATE.format(type(General_Exception).__name__, General_Exception.args)) 
         return False
 
-    def Generate_String(self):
+    def GenerateString(self):
         try:
             GeneratedString = ""
             CandidatesConcat = [*self.DIGITS \
@@ -119,7 +123,7 @@ class Generator():
                                 GeneratedStringSingle = random.choice(CanidateSep[CanidateSplitIndexesRandom[j]])
                             GeneratedStringSeg += GeneratedStringSingle
                         else:
-                            raise Exception("Given character amount (" 
+                            raise Exception("Required character amount (" 
                                 + str(self.Parameters.CHARACTERS) + ") is greater than the possible candidates for the string (" 
                                     + str(len(CandidatesConcat)) + ")")
                     else:
@@ -152,11 +156,11 @@ class Generator():
                 Run = "Yes"
             if (Run[0].lower() == "y"):
                 if self.Parameters.CHARACTERS > 0:
-                    Generated_Strings = [self.Generate_String() for i in range(0, self.Parameters.NUMBERS)]
+                    Generated_Strings = [self.GenerateString() for i in range(0, self.Parameters.NUMBERS)]
                     if None not in Generated_Strings:                       #No errors were found
                         if self.Parameters.FILE_OUTPUT:                     #Output to text file
                             Output_File = "String_Output.txt"
-                            if self.Output_To_File(Generated_Strings, Output_File): 
+                            if self.OutputToFile(Generated_Strings, Output_File): 
                                 print("String(s) were written to '" + str(Output_File) + "'")
                         if self.Parameters.ENCRYPTED_FILE_OUTPUT:           #Prompt for AES key; Output encrypted text to file
                             Output_File = "Encrypted_String_Output.txt"
@@ -164,7 +168,7 @@ class Generator():
                             while len(AES_Key) != 16:
                                 print("AES keys must be 16 characters")
                                 AES_Key = getpass("Key: ")
-                            if self.Output_To_File_Encrypted(Generated_Strings, AES_Key, Output_File):
+                            if self.OutputToFileEncrypted(Generated_Strings, AES_Key, Output_File):
                                 print("String(s) were written to '" + str(Output_File) + "'")
                         if not self.Parameters.FILE_OUTPUT \
                             and not self.Parameters.ENCRYPTED_FILE_OUTPUT:  #Output generated string(s) to console
@@ -183,6 +187,7 @@ if __name__ == "__main__": 	#Reads in arguments
 	par.add_argument("-num", type=int, help="<Required> number of strings to generate", required=True)
 
 	#Optional parameters
+	par.add_argument("-filter", help="<Optional> these characters that will be excluded from the generated string")
 	par.add_argument("-lc", help="<Optional> include at least one lowercase alphabet character (Default is digits only)", action="store_true")
 	par.add_argument("-uc", help="<Optional> include at least one uppercase alphabet character (Default is digits only)", action="store_true")
 	par.add_argument("-punc", help="<Optional> include at least one puncuation character (Default is digits only)", action="store_true")
